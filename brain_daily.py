@@ -28,7 +28,7 @@ QUOTA = 2 if dt.datetime.now(IST).date() <= SPRINT_END else 1
 # Weekday (Mon=0) -> datasets, least crowded first
 THEMES = {0: ["model16", "model51"], 1: ["news18", "socialmedia12"], 2: ["option9", "option8"],
           3: ["fundamental2", "model16"], 4: ["pv13", "news18"], 5: ["model51", "socialmedia8"],
-          6: ["socialmedia8", "socialmedia12"]}
+          6: ["socialmedia8", "model51"]}
 HELPERS = ["unsystematic_risk_last_90_days", "beta_last_90_days_spy", "snt_social_volume"]
 
 TEMPLATES = [
@@ -42,6 +42,15 @@ TEMPLATES = [
 PAIR_TEMPLATES = [
     "rank(ts_zscore({f}, 20)) * rank({h})", "-rank(ts_zscore({f}, 20)) * rank({h})",
     "group_rank(ts_rank({f}, 60) - ts_rank({h}, 60), subindustry)",
+]
+# Ideas that have actually passed or come close on this account (fundamental/analyst value & quality)
+VALUE_IDEAS = [
+    "group_rank(ts_rank(operating_income/assets, 252), subindustry)", "rank(ts_rank(cashflow_op/assets, 252))",
+    "group_rank(ts_rank(income/equity, 252), subindustry)", "group_rank(cashflow_op/enterprise_value, subindustry)",
+    "group_rank(ts_rank(ebitda/enterprise_value, 252), subindustry)", "group_rank(-ts_rank(liabilities/assets, 252), subindustry)",
+    "group_rank(ts_rank((cashflow_op - capex)/assets, 252), industry)", "group_rank(ts_rank(sales/assets, 252), subindustry)",
+    "rank(ts_rank(operating_income/assets, 252)) * rank(-unsystematic_risk_last_90_days)",
+    "group_rank(ts_rank(est_eps/close, 252), subindustry)", "group_rank(ts_delta(est_eps, 60)/close, subindustry)",
 ]
 SETTINGS = [(4, "SUBINDUSTRY"), (10, "INDUSTRY"), (0, "SUBINDUSTRY")]
 lock = threading.Lock()
@@ -177,7 +186,9 @@ def main():
         fields = fields[:40]
         jobs = [(t.format(f=f), d, n) for (d, n), f, t in itertools.product(SETTINGS, fields, TEMPLATES)]
         jobs += [(t.format(f=f, h=h), 4, "SUBINDUSTRY") for f, h, t in itertools.product(fields[:10], HELPERS, PAIR_TEMPLATES) if f != h]
+        value = [(e, 0, n) for e in VALUE_IDEAS for n in ("INDUSTRY", "SUBINDUSTRY")]
         random.shuffle(jobs)
+        jobs = value + jobs          # run the proven-style ideas first
         with ThreadPoolExecutor(WORKERS) as ex:
             rows = [r for r in ex.map(lambda j: simulate(s, j), jobs[:todo]) if r]
 
